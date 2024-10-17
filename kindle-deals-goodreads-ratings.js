@@ -29,7 +29,7 @@
   let linksToProcess = [];
   let currentLinkIndex = 0;
   let isPaused = false;
-  let currentProcessingPromise = null;
+  let isProcessing = false;
 
   function log(message) {
       if (debugMode) {
@@ -114,7 +114,7 @@
                       reject(error);
                   }
               });
-          }, 500);
+          }, 250);
       });
   }
 
@@ -294,9 +294,12 @@
       while (currentLinkIndex < linksToProcess.length && !isPaused) {
           const link = linksToProcess[currentLinkIndex];
           const asin = getASIN(link.href);
+
+          currentLinkIndex++;
+
           if (asin && !processedASINs.has(asin)) {
               try {
-                  log(`Processing book ${currentLinkIndex + 1} of ${linksToProcess.length}`);
+                  log(`Processing book ${currentLinkIndex} of ${linksToProcess.length}`);
                   const data = await fetchGoodreadsData(asin);
                   if (data) {
                       // Extract price from Amazon page
@@ -313,7 +316,6 @@
                   console.error('Error fetching Goodreads data:', error);
               }
           }
-          currentLinkIndex++;
       }
 
       if (currentLinkIndex >= linksToProcess.length) {
@@ -334,14 +336,22 @@
       const button = document.createElement('button');
       button.textContent = 'Get Goodreads Ratings';
       button.style.margin = '10px';
-      button.addEventListener('click', function() {
+      button.addEventListener('click', async function() {
+          this.disabled = true;
+
           const newLinks = getUniqueBookLinks(section);
           linksToProcess.push(...newLinks.filter(link => !processedASINs.has(getASIN(link.href))));
-          if (!currentProcessingPromise || currentProcessingPromise.status === 'fulfilled') {
-              currentProcessingPromise = processBooks();
-          }
-          this.disabled = true;
-          addUIElement(bookData, true);
+
+          if (!isProcessing) {
+            isProcessing = true;
+            addUIElement(bookData, true);
+
+            try {
+                await processBooks();
+            } finally {
+                isProcessing = false;
+            }
+        }
       });
       section.insertBefore(button, section.firstChild);
   }
