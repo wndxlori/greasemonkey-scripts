@@ -22,6 +22,8 @@
   const reviewCountThresholds = [1000, 5000, 10000];
   const reviewCountColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
 
+  const longTitleLength = 42;
+
   let bookData = [];
   let processedASINs = new Set();
   let linksToProcess = [];
@@ -82,7 +84,7 @@
                       }
 
                       const fullTitle = h1Element.textContent.trim();
-                      const title = fullTitle.length > 50 ? fullTitle.slice(0, 50) + '...' : fullTitle;
+                      const title = fullTitle.length > longTitleLength ? fullTitle.slice(0, longTitleLength) + '...' : fullTitle;
                       const rating = metadataElement.textContent.trim().replace(/\s*stars/, '');
                       const ratingsCountElement = doc.querySelector('[data-testid="ratingsCount"]');
                       const ratingsCount = ratingsCountElement ? ratingsCountElement.textContent.trim().split(' ')[0] : '0';
@@ -96,6 +98,8 @@
                       const data = {
                           asin: asin,
                           title: title || "Unknown Title",
+                          fullTitle: fullTitle,
+                          longTitle: fullTitle.length > longTitleLength,
                           rating: rating,
                           ratingsCount: ratingsCount,
                           reviewsCount: reviewsCount,
@@ -216,6 +220,9 @@
               link.href = book.goodreadsUrl;
               link.target = '_blank';
               link.textContent = book.title;
+              if (book.longTitle) {
+                link.title = book.fullTitle;
+              }
               titleCell.appendChild(link);
               titleCell.style.border = '1px solid gray';
               titleCell.style.padding = '5px';
