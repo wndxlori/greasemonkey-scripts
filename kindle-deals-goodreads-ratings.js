@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Amazon Kindle Deals Goodreads Ratings (Per Section)
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.1
 // @description  Add Goodreads ratings to Amazon Kindle deals page for specific sections with highlighting
 // @match        https://www.amazon.com/*
 // @grant        GM_xmlhttpRequest
@@ -19,10 +19,8 @@
   const ratingColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
 
   // Review count thresholds and colors
-  const lowReviewCountThreshold = 200;
-  const highReviewCountThreshold = 10000;
-  const lowReviewCountColor = '#ffcccc'; // Light red
-  const highReviewCountColor = '#ccffcc'; // Light green
+  const reviewCountThresholds = [1000, 5000, 10000];
+  const reviewCountColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
 
   let bookData = [];
   let processedASINs = new Set();
@@ -85,11 +83,15 @@
 
                       const fullTitle = h1Element.textContent.trim();
                       const title = fullTitle.length > 50 ? fullTitle.slice(0, 50) + '...' : fullTitle;
-                      const rating = metadataElement.textContent.trim();
+                      const rating = metadataElement.textContent.trim().replace(/\s*stars/, '');
                       const ratingsCountElement = doc.querySelector('[data-testid="ratingsCount"]');
                       const ratingsCount = ratingsCountElement ? ratingsCountElement.textContent.trim().split(' ')[0] : '0';
                       const reviewsCountElement = doc.querySelector('[data-testid="reviewsCount"]');
                       const reviewsCount = reviewsCountElement ? reviewsCountElement.textContent.trim().split(' ')[0] : '0';
+
+                      // Extract the first genre
+                      const genreElement = doc.querySelector('.BookPageMetadataSection__genreButton a');
+                      const genre = genreElement ? genreElement.textContent.trim() : 'Unknown';
 
                       const data = {
                           asin: asin,
@@ -97,6 +99,7 @@
                           rating: rating,
                           ratingsCount: ratingsCount,
                           reviewsCount: reviewsCount,
+                          genre: genre,
                           goodreadsUrl: `https://www.goodreads.com/book/isbn/${asin}`
                       };
                       log(`Parsed data for ${data.title}: ${JSON.stringify(data)}`);
@@ -123,10 +126,10 @@
 
   function getReviewCountColor(count) {
       count = parseInt(count.replace(/,/g, ''));
-      if (count < lowReviewCountThreshold) {
-          return lowReviewCountColor;
-      } else if (count > highReviewCountThreshold) {
-          return highReviewCountColor;
+      for (let i = reviewCountThresholds.length - 1; i >= 0; i--) {
+          if (count >= reviewCountThresholds[i]) {
+              return reviewCountColors[i];
+          }
       }
       return '';
   }
@@ -151,17 +154,26 @@
       // Clear previous content
       container.innerHTML = '';
 
+      const headerContainer = document.createElement('div');
+      headerContainer.style.display = 'flex';
+      headerContainer.style.justifyContent = 'space-between';
+      headerContainer.style.alignItems = 'center';
+      headerContainer.style.marginBottom = '10px';
+
       const title = document.createElement('h3');
       title.textContent = 'Goodreads Ratings';
-      container.appendChild(title);
+      title.style.margin = '0';
+      headerContainer.appendChild(title);
 
       // Add pause/resume button only if there are links to process
       if (linksToProcess.length > 0) {
           const pauseResumeButton = document.createElement('button');
           pauseResumeButton.textContent = isPaused ? 'Resume' : 'Pause';
           pauseResumeButton.addEventListener('click', togglePauseResume);
-          container.appendChild(pauseResumeButton);
+          headerContainer.appendChild(pauseResumeButton);
       }
+
+      container.appendChild(headerContainer);
 
       const statusMessage = document.createElement('p');
       if (isPaused) {
@@ -182,7 +194,7 @@
       // Create table header
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      ['Title', 'Rating', 'Rating Count', 'Review Count'].forEach(headerText => {
+      ['Title', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre'].forEach(headerText => {
           const th = document.createElement('th');
           th.textContent = headerText;
           th.style.border = '1px solid gray';
@@ -209,12 +221,25 @@
               titleCell.style.padding = '5px';
               row.appendChild(titleCell);
 
+              // Price cell
+              const priceCell = document.createElement('td');
+              const priceLink = document.createElement('a');
+              priceLink.href = `https://www.amazon.com/dp/${book.asin}`;
+              priceLink.target = '_blank';
+              priceLink.textContent = `$${book.price}` || 'N/A';
+              priceCell.appendChild(priceLink);
+              priceCell.style.border = '1px solid gray';
+              priceCell.style.padding = '5px';
+              priceCell.style.textAlign = 'right';
+              row.appendChild(priceCell);
+
               // Rating cell
               const ratingCell = document.createElement('td');
-              ratingCell.textContent = `${book.rating} stars`;
+              ratingCell.textContent = book.rating;
               ratingCell.style.backgroundColor = getRatingColor(book.rating);
               ratingCell.style.border = '1px solid gray';
               ratingCell.style.padding = '5px';
+              ratingCell.style.textAlign = 'right';
               row.appendChild(ratingCell);
 
               // Ratings count cell
@@ -223,6 +248,7 @@
               ratingsCountCell.style.backgroundColor = getReviewCountColor(book.ratingsCount);
               ratingsCountCell.style.border = '1px solid gray';
               ratingsCountCell.style.padding = '5px';
+              ratingsCountCell.style.textAlign = 'right';
               row.appendChild(ratingsCountCell);
 
               // Reviews count cell
@@ -230,7 +256,15 @@
               reviewsCountCell.textContent = book.reviewsCount;
               reviewsCountCell.style.border = '1px solid gray';
               reviewsCountCell.style.padding = '5px';
+              reviewsCountCell.style.textAlign = 'right';
               row.appendChild(reviewsCountCell);
+
+              // Genre cell
+              const genreCell = document.createElement('td');
+              genreCell.textContent = book.genre;
+              genreCell.style.border = '1px solid gray';
+              genreCell.style.padding = '5px';
+              row.appendChild(genreCell);
 
               tbody.appendChild(row);
           }
@@ -257,7 +291,17 @@
               try {
                   log(`Processing book ${currentLinkIndex + 1} of ${linksToProcess.length}`);
                   const data = await fetchGoodreadsData(asin);
-                  addBookAndSort(data);
+                  if (data) {
+                      // Extract price from Amazon page
+                      const priceElement = link.closest('[data-testid="asin-face"]').querySelector('[data-testid="price"]');
+                      if (priceElement) {
+                          const priceMatch = priceElement.textContent.match(/Deal price: \$(\d+\.\d+)/);
+                          data.price = priceMatch ? priceMatch[1] : 'N/A';
+                      } else {
+                          data.price = 'N/A';
+                      }
+                      addBookAndSort(data);
+                  }
               } catch (error) {
                   console.error('Error fetching Goodreads data:', error);
               }
@@ -286,7 +330,7 @@
       button.addEventListener('click', function() {
           const newLinks = getUniqueBookLinks(section);
           linksToProcess.push(...newLinks.filter(link => !processedASINs.has(getASIN(link.href))));
-          if (!currentProcessingPromise) {
+          if (!currentProcessingPromise || currentProcessingPromise.status === 'fulfilled') {
               currentProcessingPromise = processBooks();
           }
           this.disabled = true;
