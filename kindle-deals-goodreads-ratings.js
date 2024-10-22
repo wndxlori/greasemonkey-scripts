@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Amazon Kindle Deals Goodreads Ratings (Per Section)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.4
 // @description  Add Goodreads ratings to Amazon Kindle deals page for specific sections with highlighting
 // @match        https://www.amazon.com/*
 // @grant        GM_xmlhttpRequest
@@ -42,18 +42,80 @@
       return match ? match[1] : null;
   }
 
+  function extractYear(text) {
+      const yearRegex = /\b\d{4}\b/; // Regular expression to match a four-digit year
+      const match = text.match(yearRegex);
+      return match ? parseInt(match[0]) : '';
+  }
+
+  function hasWantToReadButton(container) {
+      const buttons = container.querySelectorAll('button');
+
+      return Array.from(buttons).some(button =>
+          button.textContent.trim() === "Want to read"
+      );
+  }
+
+  function getLiteraryAwards(doc) {
+      if (doc) {
+          const scripts = doc.getElementsByTagName('script');
+
+          let awardsData = null;
+
+          // Iterate through scripts to find the one containing awards data
+          for (let script of scripts) {
+              const content = script.textContent || script.innerText;
+              if (content.includes('"awards":')) {
+                  // This script likely contains our data
+                  const match = content.match(/"awards":\s*"([^"]*)"/);
+                  if (match) {
+                      try {
+                          awardsData = match[1];
+                          break;
+                      } catch (e) {
+                          console.error("Error parsing awards data:", e);
+                      }
+                  }
+              }
+          }
+
+          return awardsData;
+      } else {
+          return null;
+      }
+  }
+
   function getUniqueBookLinks(container) {
-      const asinFaces = container.querySelectorAll('div[data-testid="asin-face"]');
       const uniqueLinks = [];
       const seenHrefs = new Set();
 
-      asinFaces.forEach(asinFace => {
+      // Kindle Deals page
+      const sections = container.querySelectorAll('div[data-testid="asin-face"], .ubf-book-info');
+
+      sections.forEach(asinFace => {
           const link = asinFace.querySelector('a');
           if (link && !seenHrefs.has(link.href)) {
               seenHrefs.add(link.href);
               uniqueLinks.push(link);
           }
       });
+
+
+      // Regular Kindle page
+      const bookFaceouts = container.querySelectorAll('bds-unified-book-faceout');
+
+      bookFaceouts.forEach(faceout => {
+          const shadowRoot = faceout.shadowRoot;
+          if (shadowRoot) {
+              const link = shadowRoot.querySelector('a');
+              if (link && !seenHrefs.has(link.href)) {
+                  seenHrefs.add(link.href);
+                  uniqueLinks.push(link);
+              }
+          }
+      });
+
+      log(`Unique link count: ${uniqueLinks.length}`);
 
       return uniqueLinks;
   }
@@ -95,6 +157,16 @@
                       const genreElement = doc.querySelector('.BookPageMetadataSection__genreButton a');
                       const genre = genreElement ? genreElement.textContent.trim() : 'Unknown';
 
+                      // Extract the publication year
+                      const publicationElement = doc.querySelector('p[data-testid="publicationInfo"]');
+                      const publicationYear = publicationElement ? extractYear(publicationElement.textContent.trim()) : '';
+
+                      // Is it on a shelf already?
+                      const actionsElement = doc.querySelector('.BookPageMetadataSection__mobileBookActions');
+                      const onShelf = !hasWantToReadButton(actionsElement);
+
+                      const awards = getLiteraryAwards(doc);
+
                       const data = {
                           asin: asin,
                           title: title || "Unknown Title",
@@ -104,7 +176,10 @@
                           ratingsCount: ratingsCount,
                           reviewsCount: reviewsCount,
                           genre: genre,
-                          goodreadsUrl: `https://www.goodreads.com/book/isbn/${asin}`
+                          goodreadsUrl: `https://www.goodreads.com/book/isbn/${asin}`,
+                          publicationYear: publicationYear,
+                          onShelf: onShelf,
+                          awards: awards
                       };
                       log(`Parsed data for ${data.title}: ${JSON.stringify(data)}`);
                       resolve(data);
@@ -198,7 +273,7 @@
       // Create table header
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      ['Title', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre'].forEach(headerText => {
+      ['Title', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre', 'Year'].forEach(headerText => {
           const th = document.createElement('th');
           th.textContent = headerText;
           th.style.border = '1px solid gray';
@@ -219,9 +294,9 @@
               const link = document.createElement('a');
               link.href = book.goodreadsUrl;
               link.target = '_blank';
-              link.textContent = book.title;
+              link.textContent = book.onShelf ? `⭐ ${book.title}` : book.title;
               if (book.longTitle) {
-                link.title = book.fullTitle;
+                  link.title = book.fullTitle;
               }
               titleCell.appendChild(link);
               titleCell.style.border = '1px solid gray';
@@ -233,7 +308,11 @@
               const priceLink = document.createElement('a');
               priceLink.href = `https://www.amazon.com/dp/${book.asin}`;
               priceLink.target = '_blank';
-              priceLink.textContent = `$${book.price}` || 'N/A';
+              priceLink.textContent = book.price.replace(/^(?!\$)/, '$') || 'N/A'; // Add leading $ sign
+              if (book.awards) {
+                  priceLink.textContent = `🏅 ${priceLink.textContent}`;
+                  priceLink.title = book.awards;
+              }
               priceCell.appendChild(priceLink);
               priceCell.style.border = '1px solid gray';
               priceCell.style.padding = '5px';
@@ -273,6 +352,13 @@
               genreCell.style.padding = '5px';
               row.appendChild(genreCell);
 
+              // Genre cell
+              const publicationCell = document.createElement('td');
+              publicationCell.textContent = book.publicationYear;
+              publicationCell.style.border = '1px solid gray';
+              publicationCell.style.padding = '5px';
+              row.appendChild(publicationCell);
+
               tbody.appendChild(row);
           }
       });
@@ -299,15 +385,30 @@
 
           if (asin && !processedASINs.has(asin)) {
               try {
-                  log(`Processing book ${currentLinkIndex} of ${linksToProcess.length}`);
+                  log(`---- Processing book ${currentLinkIndex} of ${linksToProcess.length} ----`);
                   const data = await fetchGoodreadsData(asin);
                   if (data) {
-                      // Extract price from Amazon page
-                      const priceElement = link.closest('[data-testid="asin-face"]').querySelector('[data-testid="price"]');
-                      if (priceElement) {
-                          const priceMatch = priceElement.textContent.match(/Deal price: \$(\d+\.\d+)/);
-                          data.price = priceMatch ? priceMatch[1] : 'N/A';
-                      } else {
+                      // Kindle Deals pages
+                      const asinFace = link.closest('[data-testid="asin-face"]');
+                      if (asinFace) {
+                          const priceElement = asinFace && asinFace.querySelector('[data-testid="price"]');
+                          if (priceElement) {
+                              const priceTextContent = priceElement.textContent;
+                              const priceMatch = priceTextContent.match(/Deal price: \$(\d+\.\d+)/);
+                              data.price = priceMatch ? priceMatch[1] : 'N/A';
+                          }
+                      }
+                      // Regular Kindle page
+                      if (!data.price) {
+                          const sibling = link.nextElementSibling;
+                          if (sibling) {
+                              const bookPrice = sibling.querySelector('bds-book-price');
+                              if (bookPrice) {
+                                  data.price = bookPrice.getAttribute('unstylizedprice');
+                              }
+                          }
+                      }
+                      if (!data.price) {
                           data.price = 'N/A';
                       }
                       addBookAndSort(data);
@@ -343,22 +444,22 @@
           linksToProcess.push(...newLinks.filter(link => !processedASINs.has(getASIN(link.href))));
 
           if (!isProcessing) {
-            isProcessing = true;
-            addUIElement(bookData, true);
+              isProcessing = true;
+              addUIElement(bookData, true);
 
-            try {
-                await processBooks();
-            } finally {
-                isProcessing = false;
-            }
-        }
+              try {
+                  await processBooks();
+              } finally {
+                  isProcessing = false;
+              }
+          }
       });
       section.insertBefore(button, section.firstChild);
   }
 
   function initializeScript() {
       const addButtonsToSections = () => {
-          const sections = document.querySelectorAll('div[data-testid="asin-faceout-shoveler.card-cont"]:not([data-goodreads-processed])');
+          const sections = document.querySelectorAll('div[data-testid="asin-faceout-shoveler.card-cont"]:not([data-goodreads-processed]), div[data-testid="mfs-container.hor-scroll"]:not([data-goodreads-processed])');
           sections.forEach(section => {
               addButtonToSection(section);
               section.setAttribute('data-goodreads-processed', 'true');
