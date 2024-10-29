@@ -48,12 +48,13 @@
       return match ? parseInt(match[0]) : '';
   }
 
-  function hasWantToReadButton(container) {
-      const buttons = container.querySelectorAll('button');
+  function isShelved(container) {
+    const buttons = element.querySelectorAll('button');
 
-      return Array.from(buttons).some(button =>
-          button.textContent.trim() === "Want to read"
-      );
+    return Array.from(buttons).some(button => {
+      const label = button.getAttribute('aria-label');
+      return label && label.includes('Shelved');
+    });
   }
 
   function getLiteraryAwards(doc) {
@@ -163,7 +164,7 @@
 
                       // Is it on a shelf already?
                       const actionsElement = doc.querySelector('.BookPageMetadataSection__mobileBookActions');
-                      const onShelf = !hasWantToReadButton(actionsElement);
+                      const onShelf = isShelved(actionsElement);
 
                       const awards = getLiteraryAwards(doc);
 
