@@ -49,7 +49,7 @@
     }
 
     function isShelved(container) {
-        const buttons = element.querySelectorAll('button');
+        const buttons = container.querySelectorAll('button');
 
         return Array.from(buttons).some(button => {
             const label = button.getAttribute('aria-label');
