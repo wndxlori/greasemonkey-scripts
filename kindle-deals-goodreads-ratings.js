@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         Amazon Kindle Deals Goodreads Ratings (Per Section)
+// @license      MIT-0
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Add Goodreads ratings to Amazon Kindle deals page for specific sections with highlighting
 // @match        https://www.amazon.com/*
 // @grant        GM_xmlhttpRequest
