@@ -41,6 +41,12 @@
         }
     }
 
+    function decodeHTMLEntities(text) {
+        const textArea = document.createElement('textarea');
+        textArea.innerHTML = text;
+        return textArea.value;
+    }
+
     function getASIN(url) {
         const match = url.match(/\/([A-Z0-9]{10})(?:\/|\?|$)/);
         return match ? match[1] : null;
@@ -165,6 +171,12 @@
                         const reviewsCountElement = doc.querySelector('[data-testid="reviewsCount"]');
                         const reviewsCount = reviewsCountElement ? reviewsCountElement.textContent.trim().split(' ')[0] : '0';
 
+                        // Is this part of a series?
+                        const seriesElement = doc.querySelector('.BookPageTitleSection h3 a');
+                        const series = seriesElement ? seriesElement.textContent.trim() : null;
+                        const seriesLink = seriesElement ? seriesElement.href : null;
+
+                        // Show a small image of the cover
                         const coverImageElement = doc.querySelector('.BookCover__image img');
                         const coverImage = coverImageElement ? coverImageElement.src : 'https://dryofg8nmyqjw.cloudfront.net/images/no-cover.png';
 
@@ -197,6 +209,8 @@
                             fullTitle: fullTitle,
                             longTitle: fullTitle.length > longTitleLength,
                             author: author,
+                            series: series,
+                            seriesLink: seriesLink,
                             rating: rating,
                             ratingsCount: ratingsCount,
                             reviewsCount: reviewsCount,
@@ -358,12 +372,20 @@
 
                 // Title cell
                 const titleCell = document.createElement('td');
+                if (book.series) {
+                    const seriesLink = document.createElement('a');
+                    seriesLink.href = book.seriesLink;
+                    seriesLink.target = '_blank';
+                    seriesLink.textContent = '📚';
+                    seriesLink.title = book.series;
+                    titleCell.appendChild(seriesLink);
+                }
                 const link = document.createElement('a');
                 link.href = book.goodreadsUrl;
                 link.target = '_blank';
                 link.textContent = book.onShelf ? `⭐ ${book.title}` : book.title;
                 if (book.longTitle) {
-                    link.title = book.fullTitle;
+                    link.title = decodeHTMLEntities(book.fullTitle);
                 }
                 titleCell.appendChild(link);
                 titleCell.style.cssText = cellStyle;
@@ -383,7 +405,7 @@
                 priceLink.textContent = book.price.replace(/^(?!\$)/, '$') || 'N/A'; // Add leading $ sign
                 if (book.awards) {
                     priceLink.textContent = `🏅 ${priceLink.textContent}`;
-                    priceLink.title = book.awards;
+                    priceLink.title = decodeHTMLEntities(book.awards);
                 }
                 priceCell.appendChild(priceLink);
                 priceCell.style.cssText = cellStyle + 'text-align: right;';
@@ -478,7 +500,14 @@
                             if (sibling) {
                                 const bookPrice = sibling.querySelector('bds-book-price');
                                 if (bookPrice) {
-                                    data.price = bookPrice.getAttribute('unstylizedprice');
+                                    // data.price = bookPrice.getAttribute('unstylizedprice'); -- old way
+                                    const shadowRoot = bookPrice.shadowRoot;
+                                    if (shadowRoot) {
+                                        const priceDiv = shadowRoot.querySelector('.offscreen'); // .price -> .offscreen
+                                        if (priceDiv) {
+                                            data.price = priceDiv.textContent.trim();
+                                        }
+                                    }
                                 }
                             }
                         }
