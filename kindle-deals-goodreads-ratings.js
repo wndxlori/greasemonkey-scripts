@@ -49,7 +49,13 @@
     function extractYear(text) {
         const yearRegex = /\b\d{4}\b/; // Regular expression to match a four-digit year
         const match = text.match(yearRegex);
-        return match ? parseInt(match[0]) : '';
+        return match ? parseInt(match[0]) : '-';
+    }
+
+    function extractNumberOfPages(text) {
+        const pagesRegex = /(\d{1,3}(?:,\d{3})*)\s*(?:page|pages)/i; // This regex looks for one or more digits (with optional commas) followed by "page" or "pages"
+        const match = text.match(pagesRegex);
+        return match ? parseInt(match[1].replace(/,/g, ''), 10) : '-';
     }
 
     function isShelved(container) {
@@ -140,6 +146,7 @@
                         log(`Received response for ASIN: ${asin}`);
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(response.responseText, "text/html");
+                        // log(doc.documentElement.outerHTML);
 
                         const h1Element = doc.querySelector('h1[data-testid="bookTitle"]');
                         const metadataElement = doc.querySelector('.RatingStatistics__rating');
@@ -173,6 +180,10 @@
                         const publicationElement = doc.querySelector('p[data-testid="publicationInfo"]');
                         const publicationYear = publicationElement ? extractYear(publicationElement.textContent.trim()) : '';
 
+                        // Extract the number of pages
+                        const pagesElement = doc.querySelector('p[data-testid="pagesFormat"]');
+                        const numberOfPages = pagesElement ? extractNumberOfPages(pagesElement.textContent.trim()) : '';
+
                         // Is it on a shelf already?
                         const actionsElement = doc.querySelector('.BookPageMetadataSection__mobileBookActions');
                         const onShelf = isShelved(actionsElement);
@@ -192,6 +203,7 @@
                             genre: genre,
                             goodreadsUrl: `https://www.goodreads.com/book/isbn/${asin}`,
                             publicationYear: publicationYear,
+                            numberOfPages: numberOfPages,
                             onShelf: onShelf,
                             awards: awards
                         };
@@ -305,7 +317,7 @@
         // Create table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
-        ['Cover', 'Title', 'Author', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre', 'Year'].forEach(headerText => {
+        ['Cover', 'Title', 'Author', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre', 'Year', 'Pages'].forEach(headerText => {
             const th = document.createElement('th');
             th.textContent = headerText;
             th.style.cssText = cellStyle + `
@@ -414,6 +426,12 @@
                 publicationCell.textContent = book.publicationYear;
                 publicationCell.style.cssText = cellStyle;
                 row.appendChild(publicationCell);
+
+                // Pages cell
+                const pagesCell = document.createElement('td');
+                pagesCell.textContent = book.numberOfPages.toLocaleString('en-US');
+                pagesCell.style.cssText = cellStyle + 'text-align: right;';
+                row.appendChild(pagesCell);
 
                 tbody.appendChild(row);
             }
