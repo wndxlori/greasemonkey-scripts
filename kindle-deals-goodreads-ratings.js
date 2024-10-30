@@ -15,12 +15,16 @@
     let debugMode = true;
 
     // Rating thresholds and colors
-    const ratingThresholds = [4.00, 4.30, 4.50];
-    const ratingColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
+    const highRatingThresholds = [4.00, 4.30, 4.50];
+    const highRatingColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
+    const lowRatingThresholds = [3.60, 3.30];
+    const lowRatingColors = ['#ffe6e6', '#ffcccc']; // Light to medium red
 
     // Review count thresholds and colors
-    const reviewCountThresholds = [1000, 5000, 10000];
-    const reviewCountColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
+    const highRatingsCountThresholds = [1000, 5000, 10000];
+    const highRatingsCountColors = ['#e6ffe6', '#ccffcc', '#99ff99']; // Light to dark green
+    const lowRatingsCountThresholds = [100, 10];
+    const lowRatingsCountColors = ['#ffe6e6', '#ffcccc']; // Light to medium red
 
     const longTitleLength = 42;
 
@@ -154,9 +158,16 @@
                         const reviewsCountElement = doc.querySelector('[data-testid="reviewsCount"]');
                         const reviewsCount = reviewsCountElement ? reviewsCountElement.textContent.trim().split(' ')[0] : '0';
 
+                        const coverImageElement = doc.querySelector('.BookCover__image img');
+                        const coverImage = coverImageElement ? coverImageElement.src : 'https://dryofg8nmyqjw.cloudfront.net/images/no-cover.png';
+
+                        // Extract the first author
+                        const authorElement = doc.querySelector('span.ContributorLink__name');
+                        const author = authorElement ? authorElement.textContent.trim() : '-';
+
                         // Extract the first genre
                         const genreElement = doc.querySelector('.BookPageMetadataSection__genreButton a');
-                        const genre = genreElement ? genreElement.textContent.trim() : 'Unknown';
+                        const genre = genreElement ? genreElement.textContent.trim() : '-';
 
                         // Extract the publication year
                         const publicationElement = doc.querySelector('p[data-testid="publicationInfo"]');
@@ -170,9 +181,11 @@
 
                         const data = {
                             asin: asin,
+                            coverImage: coverImage,
                             title: title || "Unknown Title",
                             fullTitle: fullTitle,
                             longTitle: fullTitle.length > longTitleLength,
+                            author: author,
                             rating: rating,
                             ratingsCount: ratingsCount,
                             reviewsCount: reviewsCount,
@@ -196,19 +209,29 @@
 
     function getRatingColor(rating) {
         rating = parseFloat(rating);
-        for (let i = ratingThresholds.length - 1; i >= 0; i--) {
-            if (rating >= ratingThresholds[i]) {
-                return ratingColors[i];
+        for (let i = highRatingThresholds.length - 1; i >= 0; i--) {
+            if (rating >= highRatingThresholds[i]) {
+                return highRatingColors[i];
+            }
+        }
+        for (let i = lowRatingThresholds.length - 1; i >= 0; i--) {
+            if (rating < lowRatingThresholds[i]) {
+                return lowRatingColors[i];
             }
         }
         return '';
     }
 
-    function getReviewCountColor(count) {
+    function getRatingsCountColor(count) {
         count = parseInt(count.replace(/,/g, ''));
-        for (let i = reviewCountThresholds.length - 1; i >= 0; i--) {
-            if (count >= reviewCountThresholds[i]) {
-                return reviewCountColors[i];
+        for (let i = highRatingsCountThresholds.length - 1; i >= 0; i--) {
+            if (count >= highRatingsCountThresholds[i]) {
+                return highRatingsCountColors[i];
+            }
+        }
+        for (let i = lowRatingsCountThresholds.length - 1; i >= 0; i--) {
+            if (count < lowRatingsCountThresholds[i]) {
+                return lowRatingsCountColors[i];
             }
         }
         return '';
@@ -270,15 +293,25 @@
         const table = document.createElement('table');
         table.style.borderCollapse = 'collapse';
         table.style.width = '100%';
+        //table.style.tableLayout = 'fixed'; // This helps maintain consistent column widths
+
+        // Add a style for all cells
+        const cellStyle = `
+            border: 1px solid gray;
+            padding: 5px;
+            vertical-align: middle;
+        `;
 
         // Create table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
-        ['Title', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre', 'Year'].forEach(headerText => {
+        ['Cover', 'Title', 'Author', 'Price', 'Rating', 'Rating Count', 'Review Count', 'Genre', 'Year'].forEach(headerText => {
             const th = document.createElement('th');
             th.textContent = headerText;
-            th.style.border = '1px solid gray';
-            th.style.padding = '5px';
+            th.style.cssText = cellStyle + `
+                font-weight: bold;
+                background-color: #f2f2f2;
+            `;
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
@@ -290,6 +323,27 @@
             if (book) {
                 const row = document.createElement('tr');
 
+                // Cover image cell
+                const coverCell = document.createElement('td');
+                coverCell.style.cssText = cellStyle + `
+                    text-align: center;
+                    width: 30px;
+                `;
+                const coverImg = document.createElement('img');
+                coverImg.src = book.coverImage;
+                coverImg.alt = `${book.title} cover`;
+                coverImg.style.width = '28px';
+                coverImg.style.height = 'auto';
+                coverImg.style.display = 'block';
+                coverImg.style.margin = '0 auto'; // Centers the image horizontally
+                coverImg.onerror = function() {
+                    this.onerror = null;
+                    this.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+                    this.alt = 'Cover not available';
+                };
+                coverCell.appendChild(coverImg);
+                row.appendChild(coverCell);
+
                 // Title cell
                 const titleCell = document.createElement('td');
                 const link = document.createElement('a');
@@ -300,9 +354,14 @@
                     link.title = book.fullTitle;
                 }
                 titleCell.appendChild(link);
-                titleCell.style.border = '1px solid gray';
-                titleCell.style.padding = '5px';
+                titleCell.style.cssText = cellStyle;
                 row.appendChild(titleCell);
+
+                // Author cell
+                const authorCell = document.createElement('td');
+                authorCell.textContent = book.author;
+                authorCell.style.cssText = cellStyle;
+                row.appendChild(authorCell);
 
                 // Price cell
                 const priceCell = document.createElement('td');
@@ -315,49 +374,45 @@
                     priceLink.title = book.awards;
                 }
                 priceCell.appendChild(priceLink);
-                priceCell.style.border = '1px solid gray';
-                priceCell.style.padding = '5px';
-                priceCell.style.textAlign = 'right';
+                priceCell.style.cssText = cellStyle + 'text-align: right;';
                 row.appendChild(priceCell);
 
                 // Rating cell
                 const ratingCell = document.createElement('td');
                 ratingCell.textContent = book.rating;
-                ratingCell.style.backgroundColor = getRatingColor(book.rating);
-                ratingCell.style.border = '1px solid gray';
-                ratingCell.style.padding = '5px';
-                ratingCell.style.textAlign = 'right';
+                ratingCell.style.cssText = cellStyle + `
+                    text-align: right;
+                    background-color: ${getRatingColor(book.rating)};
+
+                `;
                 row.appendChild(ratingCell);
 
                 // Ratings count cell
                 const ratingsCountCell = document.createElement('td');
                 ratingsCountCell.textContent = book.ratingsCount;
-                ratingsCountCell.style.backgroundColor = getReviewCountColor(book.ratingsCount);
-                ratingsCountCell.style.border = '1px solid gray';
-                ratingsCountCell.style.padding = '5px';
-                ratingsCountCell.style.textAlign = 'right';
+                ratingsCountCell.style.cssText = cellStyle + `
+                    text-align: right;
+                    background-color: ${getRatingsCountColor(book.ratingsCount)};
+
+                `;
                 row.appendChild(ratingsCountCell);
 
                 // Reviews count cell
                 const reviewsCountCell = document.createElement('td');
                 reviewsCountCell.textContent = book.reviewsCount;
-                reviewsCountCell.style.border = '1px solid gray';
-                reviewsCountCell.style.padding = '5px';
-                reviewsCountCell.style.textAlign = 'right';
+                reviewsCountCell.style.cssText = cellStyle + 'text-align: right;';
                 row.appendChild(reviewsCountCell);
 
                 // Genre cell
                 const genreCell = document.createElement('td');
                 genreCell.textContent = book.genre;
-                genreCell.style.border = '1px solid gray';
-                genreCell.style.padding = '5px';
+                genreCell.style.cssText = cellStyle;
                 row.appendChild(genreCell);
 
                 // Genre cell
                 const publicationCell = document.createElement('td');
                 publicationCell.textContent = book.publicationYear;
-                publicationCell.style.border = '1px solid gray';
-                publicationCell.style.padding = '5px';
+                publicationCell.style.cssText = cellStyle;
                 row.appendChild(publicationCell);
 
                 tbody.appendChild(row);
