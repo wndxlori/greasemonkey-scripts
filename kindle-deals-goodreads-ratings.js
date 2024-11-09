@@ -2,7 +2,7 @@
 // @name         Amazon Kindle Deals Goodreads Ratings (Per Section)
 // @license      MIT-0
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.5.1
 // @description  Add Goodreads ratings to Amazon Kindle deals page for specific sections with highlighting
 // @match        https://www.amazon.com/*
 // @grant        GM_xmlhttpRequest
@@ -64,6 +64,23 @@
         const match = text.match(pagesRegex);
         return match ? parseInt(match[1].replace(/,/g, ''), 10) : '-';
     }
+
+    function extractLastNumber(str) {
+        // First, try to find a number after '#'
+        const hashMatch = str.match(/#\s*(\d+)\s*$/);
+        if (hashMatch) {
+          return parseInt(hashMatch[1]);
+        }
+
+        // If no '#' found, find the last number in the string
+        const allNumbers = str.match(/\d+/g);
+        if (allNumbers) {
+          return parseInt(allNumbers[allNumbers.length - 1]);
+        }
+
+        // If no numbers found at all
+        return null;
+      }
 
     function isShelved(container) {
         const buttons = container.querySelectorAll('button');
@@ -377,7 +394,7 @@
                     const seriesLink = document.createElement('a');
                     seriesLink.href = book.seriesLink;
                     seriesLink.target = '_blank';
-                    seriesLink.textContent = '📚';
+                    seriesLink.textContent = `📚 ${extractLastNumber(book.series)} | `;
                     seriesLink.title = book.series;
                     titleCell.appendChild(seriesLink);
                 }
