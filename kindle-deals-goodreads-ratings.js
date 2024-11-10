@@ -394,7 +394,7 @@
                     const seriesLink = document.createElement('a');
                     seriesLink.href = book.seriesLink;
                     seriesLink.target = '_blank';
-                    seriesLink.textContent = `📚 ${extractLastNumber(book.series)} | `;
+                    seriesLink.textContent = `📚${extractLastNumber(book.series)}`;
                     seriesLink.title = book.series;
                     titleCell.appendChild(seriesLink);
                 }
