@@ -400,7 +400,7 @@
                     titleCell.appendChild(seriesLink);
                     // Add small span separator
                     const span = document.createElement('span');
-                    link.textContent = ' | ';
+                    span.textContent = ' | ';
                     titleCell.appendChild(span);
                 }
                 const link = document.createElement('a');
