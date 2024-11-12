@@ -2,7 +2,7 @@
 // @name         Amazon Kindle Deals Goodreads Ratings (Per Section)
 // @license      MIT-0
 // @namespace    http://tampermonkey.net/
-// @version      2.5.1
+// @version      2.5.2
 // @description  Add Goodreads ratings to Amazon Kindle deals page for specific sections with highlighting
 // @match        https://www.amazon.com/*
 // @grant        GM_xmlhttpRequest
@@ -391,12 +391,17 @@
                 // Title cell
                 const titleCell = document.createElement('td');
                 if (book.series) {
+                    const seriesNumber = extractLastNumber(book.series);
                     const seriesLink = document.createElement('a');
                     seriesLink.href = book.seriesLink;
                     seriesLink.target = '_blank';
-                    seriesLink.textContent = `📚${extractLastNumber(book.series)}`;
+                    seriesLink.textContent = seriesNumber ? `📚${seriesNumber}` : '📚';
                     seriesLink.title = book.series;
                     titleCell.appendChild(seriesLink);
+                    // Add small span separator
+                    const span = document.createElement('span');
+                    link.textContent = ' | ';
+                    titleCell.appendChild(span);
                 }
                 const link = document.createElement('a');
                 link.href = book.goodreadsUrl;
