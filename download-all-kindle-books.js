@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Amazon Kindle Book Downloader
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Adds a button to trigger downloads of all Kindle books on the page
-// @author       You
-// @match        https://www.amazon.com/hz/mycd/digital-console/contentlist/booksAll/*
+// @author       + Lori Olson
+// @match        https://www.amazon.ca/hz/mycd/digital-console/contentlist/booksAll/*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
 // ==/UserScript==
